@@ -149,6 +149,44 @@ class WorkAllocationHelper
 
     }
 
+    public function getAllocatedFloorsUnitsZones($allocationCode,$data){
+        
+        $allocationData = [];
+        foreach ($data as $floor) {
+
+            $floorData = [
+                'flr_code' => $floor->flr_code,
+                'units' => []
+            ];
+            // Fetch units for this floor
+            $units = WorkAllocationUnit::where('allocation_code', $allocationCode)
+            ->where('flr_code', $floor->flr_code)
+            ->get();
+            foreach ($units as $unit) {
+                $unitData = [
+                    'unit_code' => $unit->unit_code,
+                    'zones' => []
+                ];
+                // Fetch zones for this unit
+                $zones = WorkAllocationZone::where('allocation_code', $allocationCode)
+                    ->where('flr_code', $floor->flr_code)
+                    ->where('unit_code', $unit->unit_code)
+                    ->get();
+
+                foreach ($zones as $zone) {
+                    $unitData['zones'][] = [
+                        'zone_code' => $zone->zone_code
+                    ];
+                }
+                $floorData['units'][] = $unitData;
+            }
+            $allocationData[] = $floorData;
+        }
+
+        return $allocationData;
+
+    }
+
 }
 
 ?>

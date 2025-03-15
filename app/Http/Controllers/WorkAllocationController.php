@@ -68,20 +68,63 @@ class WorkAllocationController extends Controller
 
         $startDate = $request->start_date;
         $endDate = $request->end_date;
-
         // Fetch data within the date range
 
-        $data = WorkAllocation::with([
+        $allocations = WorkAllocation::with([
             'helpers', 
-            'scltechnicians', 
-            'floors', // Load floors
-            'floors.units', // Load units for each floor
-            'floors.units.zones', // Load zones for each unit
+            'scltechnicians',
+            'floors'
         ])
-        ->whereBetween('created_at', [$startDate, $endDate])
-        ->where('created_by',$request->foremen_code)->get();
+       
+        ->whereBetween('work_allocation.created_at', [$startDate, $endDate])
+        ->where('work_allocation.created_by', $request->foremen_code)
+        ->get();
 
-        if ($data->isEmpty()) {
+        $data = [];
+
+        foreach ($allocations as $allocation) {
+
+            $allocationData = [
+                'allocation_code' => $allocation->allocation_code,
+                'allocation_type' => $allocation->allocation_type,
+                'com_code' => $allocation->com_code,
+                'bu_code' => $allocation->bu_code,
+                'pro_code' => $allocation->pro_code,
+                'bldg_code' => $allocation->bldg_code,
+                'div_code' => $allocation->div_code,
+                'sub_div_code' => $allocation->sub_div_code,
+                'act_code' => $allocation->act_code,
+                'sub_act_code' => $allocation->sub_act_code,
+                'elvn_code' => $allocation->elvn_code ,
+                'bnd_code' => $allocation->bnd_code ,
+                'act_uom' => $allocation->act_uom ,
+                'is_team' => $allocation->is_team ,
+                'team_count' => $allocation->team_count ,
+                "technician_code"=>$allocation->technician_code,
+                "subcontractor_code"=>$allocation->subcontractor_code,
+                "no_of_technicians"=>$allocation->no_of_technicians,
+                "has_scl_technicians"=>$allocation->has_scl_technicians ,
+                "sprinter_date"=>$allocation->sprinter_date,
+                "sprinter_time"=>$allocation->sprinter_time,
+                "attendance_date"=>$allocation->attendance_date,
+                "attendance_time"=>$allocation->attendance_time,
+                "attendance_status"=>$allocation->attendance_status,
+                'remark' => $allocation->remark ,
+                'status' =>  $allocation->status ,
+                'created_by' => $allocation->created_by,
+                'created_at' => $allocation->created_at,
+                'updated_by' => $allocation->updated_by,
+                'updated_at' => $allocation->updated_at,
+                'helpers' => $allocation->helpers,
+                'scltechnicians' => $allocation->scltechnicians,
+                'floors' => []
+            ];
+            
+            $allocationData['floors']   = $this->workAllocationHelper->getAllocatedFloorsUnitsZones($allocation->allocation_code,$allocation->floors );
+
+            $data[] = $allocationData;
+        }
+        if (!$data) {
             return $this->errorResponse($data,'No record found',404);            
         }
         else{
@@ -101,7 +144,7 @@ class WorkAllocationController extends Controller
         $validator = Validator::make($request->all(), [
             'data' => 'required|array',
             'data.*.foremen_code' => 'required|string|max:150',
-            'data.*.allocation_type' => 'required|string|max:150',
+            'data.*.allocation_type' => 'required|string|in:SCL,Sub Contractor',
             'data.*.com_code' => 'required|string|max:150',
             'data.*.bu_code' => 'required|string|max:150',
             'data.*.pro_code' => 'required|string|max:150',
@@ -113,9 +156,15 @@ class WorkAllocationController extends Controller
             'data.*.elvn_code' => 'nullable|string|max:150',
             'data.*.bnd_code' => 'nullable|string|max:150',
             'data.*.act_uom' => 'nullable|string|max:20',
-            'data.*.is_team' => 'nullable|integer|max:20',
-            'data.*.team_count' => 'nullable|integer'            
-           
+            'data.*.technician_code' => 'required_if:data.*.allocation_type,SCL|string|max:50',
+            'data.*.subcontractor_code' => 'required_if:data.*.allocation_type,Sub Contractor|string|max:50',
+            'data.*.no_of_technicians' => 'required_if:data.*.subcontractor_code,!=""|integer',
+            'data.*.has_scl_technicians' => 'nullable|in:0,1|integer',
+            'data.*.scl_technicians' => 'nullable|required_if:data.*.has_scl_technicians,1|array',
+            'data.*.is_team' => 'nullable|in:0,1|integer',
+            'data.*.team_count' => 'nullable|integer',
+            'data.*.helpers' => 'nullable|required_if:data.*.is_team,1|array',
+            'data.*.floors' => 'nullable|array',
         ]);
 
         if ($validator->fails()) {
@@ -146,7 +195,7 @@ class WorkAllocationController extends Controller
                     "technician_code"=>$data['technician_code'],
                     "subcontractor_code"=>$data['subcontractor_code'],
                     "no_of_technicians"=>$data['no_of_technicians'],
-                    "has_scl_technicians"=>$data['has_scl_technicians'],
+                    "has_scl_technicians"=>$data['has_scl_technicians'] ?? 0,
                     "sprinter_date"=>$data['sprinter_date'],
                     "sprinter_time"=>$data['sprinter_time'],
                     "attendance_date"=>$data['attendance_date'],
@@ -231,9 +280,10 @@ class WorkAllocationController extends Controller
      */
     public function update(Request $request, $id)
     {  
+
         $validator = Validator::make($request->all(), [
             'foremen_code' => 'required|string|max:150',
-            'allocation_type' => 'required|string|max:150',
+            'allocation_type' => 'required|string|in:SCL,Sub Contractor',
             'com_code' => 'required|string|max:150',
             'bu_code' => 'required|string|max:150',
             'pro_code' => 'required|string|max:150',
@@ -245,9 +295,15 @@ class WorkAllocationController extends Controller
             'elvn_code' => 'nullable|string|max:150',
             'bnd_code' => 'nullable|string|max:150',
             'act_uom' => 'nullable|string|max:20',
-            'is_team' => 'nullable|integer|max:20',
-            'team_count' => 'nullable|integer'            
-           
+            'technician_code' => 'required_if:allocation_type,SCL|string|max:50',
+            'subcontractor_code' => 'required_if:allocation_type,Sub Contractor|string|max:50',
+            'no_of_technicians' => 'required_if:subcontractor_code,!=""|integer',
+            'has_scl_technicians' => 'nullable|in:0,1|integer',
+            'scl_technicians' => 'nullable|required_if:has_scl_technicians,1|array',
+            'is_team' => 'nullable|in:0,1|integer',
+            'team_count' => 'nullable|integer',
+            'helpers' => 'nullable|required_if:is_team,1|array',
+            'floors' => 'nullable|array',
         ]);
 
         if ($validator->fails()) {

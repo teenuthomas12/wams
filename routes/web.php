@@ -27,4 +27,5 @@ $router->group(['prefix' => 'api', 'middleware' => 'jwt.auth'], function () use 
     $router->get('/productivity/list/open-productivities', 'ProductivityController@getOpenProductivities');
     $router->post('/productivity', 'ProductivityController@store');
     $router->get('/productivity', 'ProductivityController@index');
+    $router->post('/productivity/update/{id}', 'ProductivityController@update');
 });

@@ -10,12 +10,24 @@ use App\Models\WorkAllocation;
 use App\Models\ProductivityGap;
 use App\Traits\ResponseBuilderTrait;
 use Illuminate\Support\Str;
+use App\Models\WorkAllocationFloor;
+use App\Models\WorkAllocationUnit;
+use App\Models\WorkAllocationZone;
+use App\Helpers\WorkAllocationHelper;
+
 
 
 class ProductivityController extends Controller
 {  
    
     use ResponseBuilderTrait;
+
+    public $workAllocationHelper;
+
+    public function __construct(WorkAllocationHelper $workAllocationHelper)
+    {
+        $this->workAllocationHelper = $workAllocationHelper;
+    }
 
     public function dashboard(Request $request){
         // Validate input
@@ -48,17 +60,61 @@ class ProductivityController extends Controller
             return $this->errorResponse($validator->errors(),'Validation Failed',400);
         }
 
-        $data = WorkAllocation::with([
+        $allocations = WorkAllocation::with([
             'helpers', 
             'scltechnicians', 
-            'floors', // Load floors
-            'floors.units', // Load units for each floor
-            'floors.units.zones', // Load zones for each unit
+            'floors'
         ])
         ->where('productivity_status', 0)
         ->where('created_by',$request->foremen_code)->get();
 
-        if ($data->isEmpty()) {
+        $data = [];
+
+        foreach ($allocations as $allocation) {
+
+            $allocationData = [
+                'allocation_code' => $allocation->allocation_code,
+                'allocation_type' => $allocation->allocation_type,
+                'com_code' => $allocation->com_code,
+                'bu_code' => $allocation->bu_code,
+                'pro_code' => $allocation->pro_code,
+                'bldg_code' => $allocation->bldg_code,
+                'div_code' => $allocation->div_code,
+                'sub_div_code' => $allocation->sub_div_code,
+                'act_code' => $allocation->act_code,
+                'sub_act_code' => $allocation->sub_act_code,
+                'elvn_code' => $allocation->elvn_code ,
+                'bnd_code' => $allocation->bnd_code ,
+                'act_uom' => $allocation->act_uom ,
+                'is_team' => $allocation->is_team ,
+                'team_count' => $allocation->team_count ,
+                "technician_code"=>$allocation->technician_code,
+                "subcontractor_code"=>$allocation->subcontractor_code,
+                "no_of_technicians"=>$allocation->no_of_technicians,
+                "has_scl_technicians"=>$allocation->has_scl_technicians ,
+                "sprinter_date"=>$allocation->sprinter_date,
+                "sprinter_time"=>$allocation->sprinter_time,
+                "attendance_date"=>$allocation->attendance_date,
+                "attendance_time"=>$allocation->attendance_time,
+                "attendance_status"=>$allocation->attendance_status,
+                'remark' => $allocation->remark ,
+                'status' =>  $allocation->status ,
+                'created_by' => $allocation->created_by,
+                'created_at' => $allocation->created_at,
+                'updated_by' => $allocation->updated_by,
+                'updated_at' => $allocation->updated_at,
+                'productivity_status'=>$allocation->productivity_status,
+                'helpers' => $allocation->helpers,
+                'scltechnicians' => $allocation->scltechnicians,
+                'floors' => []
+            ];
+
+            $allocationData['floors']   = $this->workAllocationHelper->getAllocatedFloorsUnitsZones($allocation->allocation_code,$allocation->floors );
+
+            $data[] = $allocationData;
+        }
+
+        if (!$data) {
             return $this->errorResponse($data,'No record found',404);            
         }
         else{
@@ -85,12 +141,10 @@ class ProductivityController extends Controller
         $endDate = $request->end_date;
         $foremenCode  = $request->foremen_code;
 
-        $data = WorkAllocation::with([
+        $allocations = WorkAllocation::with([
             'helpers', 
             'scltechnicians', 
             'floors', // Load floors
-            'floors.units', // Load units for each floor
-            'floors.units.zones', // Load zones for each unit
             'productivity.productivityGaps' // Fetch productivity and its gaps
 
         ])
@@ -101,7 +155,54 @@ class ProductivityController extends Controller
         })
         ->get();
 
-        if ($data->isEmpty()) {
+        $data = [];
+
+        foreach ($allocations as $allocation) {
+
+            $allocationData = [
+                'allocation_code' => $allocation->allocation_code,
+                'allocation_type' => $allocation->allocation_type,
+                'com_code' => $allocation->com_code,
+                'bu_code' => $allocation->bu_code,
+                'pro_code' => $allocation->pro_code,
+                'bldg_code' => $allocation->bldg_code,
+                'div_code' => $allocation->div_code,
+                'sub_div_code' => $allocation->sub_div_code,
+                'act_code' => $allocation->act_code,
+                'sub_act_code' => $allocation->sub_act_code,
+                'elvn_code' => $allocation->elvn_code ,
+                'bnd_code' => $allocation->bnd_code ,
+                'act_uom' => $allocation->act_uom ,
+                'is_team' => $allocation->is_team ,
+                'team_count' => $allocation->team_count ,
+                "technician_code"=>$allocation->technician_code,
+                "subcontractor_code"=>$allocation->subcontractor_code,
+                "no_of_technicians"=>$allocation->no_of_technicians,
+                "has_scl_technicians"=>$allocation->has_scl_technicians ,
+                "sprinter_date"=>$allocation->sprinter_date,
+                "sprinter_time"=>$allocation->sprinter_time,
+                "attendance_date"=>$allocation->attendance_date,
+                "attendance_time"=>$allocation->attendance_time,
+                "attendance_status"=>$allocation->attendance_status,
+                'remark' => $allocation->remark ,
+                'status' =>  $allocation->status ,
+                'created_by' => $allocation->created_by,
+                'created_at' => $allocation->created_at,
+                'updated_by' => $allocation->updated_by,
+                'updated_at' => $allocation->updated_at,
+                'productivity_status'=>$allocation->productivity_status,
+                'helpers' => $allocation->helpers,
+                'scltechnicians' => $allocation->scltechnicians,
+                'productivity'   =>$allocation->productivity,
+                'floors' => []
+            ];
+
+            $allocationData['floors']   = $this->workAllocationHelper->getAllocatedFloorsUnitsZones($allocation->allocation_code,$allocation->floors );
+            $data[] = $allocationData;
+
+        }
+
+        if (!$data) {
             return $this->errorResponse($data,'No record found',404);            
         }
         else{
@@ -214,11 +315,11 @@ class ProductivityController extends Controller
         }
 
         try{
-            $productivity = Productivity::where('allocation_code',$request->productivity_code)->first();
+            $productivity = Productivity::where('productivity_code',$id)->first();
 
             if(!empty($productivity)){
                 
-                $allocation->update([
+                $productivity->update([
                         'punch_out_time'      => $request->punch_out_time,
                         'productivity_target' => $request->productivity_target,
                         'productivity_actual' => $request->productivity_actual,
@@ -231,12 +332,12 @@ class ProductivityController extends Controller
                         'updated_at' => date('Y-m-d H:i:s') 
                 ]);
     
-                ProductivityGap::where('productivity_code', $request->productivity_code)->delete();
+                ProductivityGap::where('productivity_code', $productivity->productivity_code)->delete();
                 if(!empty($request->reason_for_gap)){
                     $reasonData  = []; 
                     foreach ($request->reason_for_gap as $reason) { 
                         $reasonData[]  = [
-                            'productivity_code'      => $request->productivity_code,
+                            'productivity_code'      => $productivity->productivity_code,
                             'allocation_code'        => $request->allocation_code,
                             'reason_for_gap'         => $reason['reason'],
                             'remark'                 => $reason['remark'],
@@ -246,7 +347,7 @@ class ProductivityController extends Controller
                     }
                     ProductivityGap::insert($reasonData);
                 }
-                return $this->successResponse(null,'Productivity updated successfully',200);
+                return $this->successResponse(Null,'Productivity updated successfully',200);
             }
             else{
                 return $this->errorResponse(Null,'Productivity not found',404 );
